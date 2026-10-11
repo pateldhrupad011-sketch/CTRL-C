@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
   description: "Hand in your Ctrl C hackathon project.",
 };
 
-export default async function SubmitPage() {
+async function SubmitContent() {
   const me = await getCurrentParticipant();
   if (!me) redirect("/hackathon");
   if (!(await isSubmissionUnlocked())) redirect("/hackathon");
@@ -56,5 +57,13 @@ export default async function SubmitPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SubmitPage() {
+  return (
+    <Suspense fallback={<div className="fall min-h-dvh" />}>
+      <SubmitContent />
+    </Suspense>
   );
 }

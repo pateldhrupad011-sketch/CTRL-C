@@ -56,9 +56,9 @@ export function ScrollAssemble() {
         document.querySelectorAll("main section").forEach(assemble);
 
         const main = document.querySelector("main");
-        const observer =
-          main &&
-          new MutationObserver((records) => {
+        let observer: MutationObserver | null = null;
+        if (main) {
+          observer = new MutationObserver((records) => {
             for (const record of records) {
               for (const node of record.addedNodes) {
                 if (!(node instanceof HTMLElement)) continue;
@@ -67,7 +67,8 @@ export function ScrollAssemble() {
               }
             }
           });
-        observer?.observe(main, { childList: true, subtree: true });
+          observer.observe(main, { childList: true, subtree: true });
+        }
 
         return () => {
           observer?.disconnect();
