@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ctrl C logo</title>
+    <style>
+      @font-face {
+        font-family: Bricolage;
+        src: url("/fonts/BricolageGrotesque-Variable.woff2") format("woff2");
+        font-weight: 200 800;
+        font-stretch: 75% 100%;
+      }
+      @font-face {
+        font-family: GeistMono;
+        src: url("/fonts/GeistMono-Medium.ttf") format("truetype");
+        font-weight: 500;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #f6ead6;
+      }
+      .stage {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+      .logo {
+        padding: 48px 64px 56px;
+      }
+      .wordmark {
+        isolation: isolate;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        font-size: 80px;
+        color: #2b1a12;
+        line-height: 1;
+      }
+      .wordmark__ctrl {
+        display: inline-flex;
+        align-items: flex-end;
+        height: 1.9em;
+        min-width: 2.5em;
+        padding: 0 0.42em 0.34em;
+        border: 1.5px solid currentColor;
+        border-radius: 0.38em;
+        box-shadow: 0 0.16em 0 0 currentColor;
+        font-family: GeistMono, ui-monospace, monospace;
+        font-size: 0.62em;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
+        transform: translateY(-0.08em);
+      }
+      .wordmark__c {
+        position: relative;
+        font-family: Bricolage, ui-sans-serif, sans-serif;
+        font-weight: 800;
+        font-stretch: 85%;
+        font-size: 1.62em;
+        letter-spacing: -0.04em;
+        line-height: 0.8;
+      }
+      .wordmark__c::before {
+        content: "C";
+        position: absolute;
+        left: 0.09em;
+        top: -0.09em;
+        color: transparent;
+        -webkit-text-stroke: 1.2px #5b3df5;
+        z-index: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="logo">
+        <span class="wordmark" role="img" aria-label="Ctrl C">
+          <span class="wordmark__ctrl">ctrl</span>
+          <span class="wordmark__c">C</span>
+        </span>
+      </div>
+    </div>
+  </body>
+</html>
