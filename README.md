@@ -163,10 +163,10 @@ With `prefers-reduced-motion: reduce`, the 3D scene renders a single still frame
 
 ## Deploying
 
-The app lives in the **`ctrl-c/` subfolder** of this repository.
+The app lives at the **repository root**. In Vercel, leave **Root Directory** empty.
 
 - **A Node server with a persistent disk** (VPS, Render, Railway…), Node 20+: `npm ci && npm run build && npm run start`. Set the variables below and the admin ones above. This is the setup the interest form needs as-is.
-- **Vercel:** import the repo, set **Root Directory** to `ctrl-c`, and keep the defaults (framework: Next.js). The site works, but submissions won't persist until `src/lib/submissions.ts` uses a database (see above).
+- **Vercel:** import the repo, leave **Root Directory** empty, and keep the defaults (framework: Next.js). Add the Firebase client and Admin variables from `.env.example` to the Production environment.
 
 | Variable               | Purpose                                                                                     |
 | ---------------------- | ------------------------------------------------------------------------------------------- |
