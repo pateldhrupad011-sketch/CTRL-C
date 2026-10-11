@@ -42,6 +42,7 @@ export function AuthPanel() {
   const [mode, setMode] = useState<"signup" | "signin" | "forgot">("signup");
   const [notice, setNotice] = useState<string>();
   const [sharedEmail, setSharedEmail] = useState("");
+  const [signedIn, setSignedIn] = useState(false);
 
   const switchTo = (m: "signup" | "signin" | "forgot", emailPrefill?: string) => {
     setMode(m);
@@ -51,6 +52,14 @@ export function AuthPanel() {
 
   return (
     <div className="fall-card p-6 md:p-8">
+      {signedIn ? (
+        <div role="status">
+          <p className="mono text-[var(--pumpkin)]">You’re signed up</p>
+          <h2 className="display-wide mt-3 text-[1.9rem] leading-[1.05]">You’re in.</h2>
+          <p className="mt-3 text-muted">Your hackathon account is ready. Come back here when the submission desk opens.</p>
+        </div>
+      ) : (
+        <>
       <div role="tablist" aria-label="Account" className="grid grid-cols-2 gap-1 rounded-lg border border-line p-1">
         {(
           [
@@ -87,6 +96,7 @@ export function AuthPanel() {
           <SignUpForm
             initialEmail={sharedEmail}
             onSwitchToSignIn={(email) => switchTo("signin", email)}
+            onSuccess={() => setSignedIn(true)}
           />
         )}
         {mode === "signin" && (
@@ -94,6 +104,7 @@ export function AuthPanel() {
             initialEmail={sharedEmail}
             notice={notice}
             onForgot={() => switchTo("forgot")}
+            onSuccess={() => setSignedIn(true)}
           />
         )}
         {mode === "forgot" && (
@@ -107,6 +118,8 @@ export function AuthPanel() {
           />
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -116,9 +129,11 @@ export function AuthPanel() {
 function SignUpForm({
   initialEmail,
   onSwitchToSignIn,
+  onSuccess,
 }: {
   initialEmail?: string;
   onSwitchToSignIn?: (email: string) => void;
+  onSuccess: () => void;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -161,6 +176,7 @@ function SignUpForm({
         if (result?.error) {
           setError(result.error);
         } else {
+          onSuccess();
           router.refresh();
         }
       } catch (err: unknown) {
@@ -270,10 +286,12 @@ function SignInForm({
   initialEmail,
   notice,
   onForgot,
+  onSuccess,
 }: {
   initialEmail?: string;
   notice?: string;
   onForgot: () => void;
+  onSuccess: () => void;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState(initialEmail || "");
@@ -299,6 +317,7 @@ function SignInForm({
         if (result?.error) {
           setError(result.error);
         } else {
+          onSuccess();
           router.refresh();
         }
       } catch (err) {
