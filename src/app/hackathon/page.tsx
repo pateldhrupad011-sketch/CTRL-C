@@ -2,20 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { signOut } from "@/actions/hackathon-auth";
-import { getHackathonConfig } from "@/lib/hackathon-config";
-import { getCurrentParticipant } from "@/lib/participant-session";
-import { isSubmissionUnlocked } from "@/lib/submit-unlock";
 import { PRIVACY_POLICY_URL, contact } from "@/content/site";
 import { AuthPanel } from "./AuthPanel";
-import { UnlockForm } from "./UnlockForm";
 
 export const metadata: Metadata = {
   title: "Hackathon",
   description: "The Ctrl C hackathon: sign up, build something with your team, and submit your project.",
 };
-
-export const instant = false;
 
 const LEAF = "M12 1.5c.9 2.3 2.4 3.6 4.4 3.9-.6 1.4-.5 2.6.4 3.6 1.3-.9 2.8-1.1 4.6-.6-.8 2-.6 3.6.8 4.8-2.4.5-3.9 1.7-4.4 3.6-1.5-.8-3-.9-4.6-.3l.6 6h-1.6l.6-6c-1.6-.6-3.1-.5-4.6.3-.5-1.9-2-3.1-4.4-3.6 1.4-1.2 1.6-2.8.8-4.8 1.8-.5 3.3-.3 4.6.6.9-1 1-2.2.4-3.6 2-.3 3.5-1.6 4.4-3.9Z";
 
@@ -50,7 +43,9 @@ export default function HackathonPage() {
           <span className="sr-only">Back to the Ctrl C homepage</span>
         </Link>
         <div className="flex items-center gap-3">
-          <HeaderAccount />
+          <a href="#join" className="fall-ghost px-4">
+            Sign up
+          </a>
           <ThemeToggle />
         </div>
       </header>
@@ -148,59 +143,6 @@ export default function HackathonPage() {
   );
 }
 
-async function HeaderAccount() {
-  const me = await getCurrentParticipant();
-  if (!me) {
-    return (
-      <a href="#join" className="fall-ghost px-4">
-        Sign up
-      </a>
-    );
-  }
-  return (
-    <>
-      <span className="hidden text-sm text-muted sm:inline">
-        Signed in as <span className="text-fg">{me.name}</span>
-      </span>
-      <form action={signOut}>
-        <button type="submit" className="fall-ghost px-4">
-          Sign out
-        </button>
-      </form>
-    </>
-  );
-}
-
-async function JoinCard() {
-  const me = await getCurrentParticipant();
-  if (!me) return <AuthPanel />;
-  const [{ submissionCode }, unlocked] = await Promise.all([getHackathonConfig(), isSubmissionUnlocked()]);
-  if (unlocked) {
-    return (
-      <div className="fall-card p-6 md:p-8">
-        <p className="mono text-[var(--pumpkin)]">You’re signed up</p>
-        <h2 className="display-wide mt-3 text-[1.9rem] leading-[1.05] break-words">Welcome, {me.name.split(" ")[0]}.</h2>
-        <p className="mt-3 text-muted">
-          You’re in as <span className="text-fg">{me.email}</span>. The submission desk is open for you.
-        </p>
-        <a href="/hackathon/submit" className="key key--primary mt-8 w-full">
-          <span>Open submission</span>
-          <span className="key__hint" aria-hidden="true">
-            →
-          </span>
-        </a>
-      </div>
-    );
-  }
-  return (
-    <div className="fall-card p-6 md:p-8">
-      <p className="mono text-[var(--pumpkin)]">You’re signed up</p>
-      <h2 className="display-wide mt-3 text-[1.9rem] leading-[1.05] break-words">Welcome, {me.name.split(" ")[0]}.</h2>
-      <p className="mt-3 text-muted">
-        You’re in as <span className="text-fg">{me.email}</span>. Enter the organizer code to open the submission
-        desk.
-      </p>
-      <UnlockForm open={Boolean(submissionCode)} />
-    </div>
-  );
+function JoinCard() {
+  return <AuthPanel />;
 }
