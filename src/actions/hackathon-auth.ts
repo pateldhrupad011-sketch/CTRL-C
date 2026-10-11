@@ -23,6 +23,9 @@ export async function createSession(
 ): Promise<SessionError | null> {
   try {
     const decoded = await adminAuth().verifyIdToken(idToken);
+    if (decoded.email_verified !== true) {
+      return { error: "Verify your email address before joining the hackathon." };
+    }
     const email = decoded.email || "";
     const participantName = name?.trim() || decoded.name || (email ? email.split("@")[0] : "Participant");
 

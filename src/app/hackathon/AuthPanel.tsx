@@ -6,6 +6,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  signOut,
   updateProfile,
   AuthError,
 } from "firebase/auth";
@@ -33,6 +35,8 @@ function firebaseMessage(err: unknown): string {
       "Email/Password sign-in is not enabled. Ask the organiser to enable it in Firebase Console.",
     "auth/configuration-not-found":
       "Firebase Auth is not configured. Email/Password sign-in may need to be enabled.",
+    "auth/invalid-action-code": "This reset link is invalid or has expired. Request a new one.",
+    "auth/missing-android-pkg-name": "Password reset is not configured correctly. Ask the organiser to check Firebase Auth.",
   };
   return map[code] ?? `Something went wrong (${code || "unknown"}). Please try again.`;
 }
@@ -98,7 +102,6 @@ export function AuthPanel() {
           <SignUpForm
             initialEmail={sharedEmail}
             onSwitchToSignIn={(email) => switchTo("signin", email)}
-            onSuccess={() => setSignedIn(true)}
           />
         )}
         {mode === "signin" && (
@@ -131,13 +134,10 @@ export function AuthPanel() {
 function SignUpForm({
   initialEmail,
   onSwitchToSignIn,
-  onSuccess,
 }: {
   initialEmail?: string;
   onSwitchToSignIn?: (email: string) => void;
-  onSuccess: () => void;
 }) {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState(initialEmail || "");
   const [password, setPassword] = useState("");
@@ -148,9 +148,14 @@ function SignUpForm({
 
   function validate() {
     const errs: Record<string, string> = {};
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailParts = normalizedEmail.split("@");
     if (!name.trim()) errs.name = "Tell us your name.";
     else if (name.length > 100) errs.name = "Keep it under 100 characters.";
     if (!email.trim()) errs.email = "We need your email.";
+    else if (emailParts.length !== 2 || !emailParts[0] || !emailParts[1].includes(".") || emailParts[1].startsWith(".") || emailParts[1].endsWith(".")) {
+      errs.email = "Enter a complete email address, like name@gmail.com.";
+    }
     if (password.length < 6) errs.password = "Use at least 6 characters.";
     return errs;
   }
@@ -172,15 +177,9 @@ function SignUpForm({
         const cred = await createUserWithEmailAndPassword(clientAuth, email.trim(), password);
         // 2. Set display name in Firebase Auth
         await updateProfile(cred.user, { displayName: name.trim() });
-        // 3. Get fresh ID token and hand it to the server
-        const idToken = await cred.user.getIdToken();
-        const result = await createSession(idToken, name.trim());
-        if (result?.error) {
-          setError(result.error);
-        } else {
-          onSuccess();
-          router.refresh();
-        }
+        await sendEmailVerification(cred.user);
+        await signOut(clientAuth);
+        setError("Check your inbox and click the verification link. Then return here and sign in.");
       } catch (err: unknown) {
         const code = (err as AuthError)?.code ?? "";
         if (code === "auth/email-already-in-use") {
@@ -313,6 +312,12 @@ function SignInForm({
       try {
         // 1. Sign in with Firebase Auth
         const cred = await signInWithEmailAndPassword(clientAuth, email.trim(), password);
+        if (!cred.user.emailVerified) {
+          await sendEmailVerification(cred.user);
+          await signOut(clientAuth);
+          setError("Verify your email first. We sent a new verification link.");
+          return;
+        }
         // 2. Get fresh ID token and hand it to the server
         const idToken = await cred.user.getIdToken();
         const result = await createSession(idToken, cred.user.displayName || undefined);
@@ -404,24 +409,21 @@ function ForgotPassword({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) {
-      setError("Enter the email you signed up with.");
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailParts = normalizedEmail.split("@");
+    if (!normalizedEmail || emailParts.length !== 2 || !emailParts[0] || !emailParts[1].includes(".")) {
+      setError("Enter the complete email you signed up with.");
       return;
     }
     setError(undefined);
 
     startTransition(async () => {
       try {
-        await sendPasswordResetEmail(clientAuth, email.trim());
+        await sendPasswordResetEmail(clientAuth, normalizedEmail);
         onDone(); // Switch back to sign-in with a success notice
       } catch (err) {
         const code = (err as AuthError)?.code ?? "";
-        // Don't reveal whether the email exists — always show success.
-        if (code === "auth/user-not-found" || code === "auth/invalid-email") {
-          onDone();
-        } else {
-          setError(firebaseMessage(err));
-        }
+        setError(firebaseMessage(err));
       }
     });
   }
