@@ -187,4 +187,3 @@ No domain is hard-coded. Until the variable is set, the sitemap is empty and Ope
 - [ ] Any founder or organization details beyond the name, if wanted in **Our story**
 
 Nothing on the site invents members, stats, events, sponsors, testimonials or contact details. Keep it that way as content arrives.
-# CTRL-C
