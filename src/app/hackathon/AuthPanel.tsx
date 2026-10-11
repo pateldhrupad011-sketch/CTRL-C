@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { clientAuth } from "@/lib/firebase-client";
 import { createSession } from "@/actions/hackathon-auth";
+import { UnlockForm } from "./UnlockForm";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,8 @@ export function AuthPanel() {
         <div role="status">
           <p className="mono text-[var(--pumpkin)]">You’re signed up</p>
           <h2 className="display-wide mt-3 text-[1.9rem] leading-[1.05]">You’re in.</h2>
-          <p className="mt-3 text-muted">Your hackathon account is ready. Come back here when the submission desk opens.</p>
+          <p className="mt-3 text-muted">Enter the submission code shared by the organizers to open the project submission page.</p>
+          <UnlockForm open />
         </div>
       ) : (
         <>
@@ -111,8 +113,8 @@ export function AuthPanel() {
           <ForgotPassword
             initialEmail={sharedEmail}
             onDone={() => {
-              setNotice("Password reset email sent. Check your inbox.");
               switchTo("signin");
+              setNotice("Password reset email sent. Check your inbox.");
             }}
             onBack={() => switchTo("signin")}
           />
