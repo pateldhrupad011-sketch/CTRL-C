@@ -15,12 +15,9 @@ export function ProjectForm() {
         <p className="mono text-[var(--pumpkin)]">Submitted</p>
         <h3 className="display-wide mt-3 text-[2rem] leading-[1.05]">{state.teamName} is in the pile.</h3>
         <p className="mt-4 text-muted">Your project reached the Ctrl C organizers. Thanks for building with us.</p>
-        <button type="button" className="key mt-8" onClick={() => window.location.reload()}>
-          <span>Submit another project</span>
-          <span className="key__hint" aria-hidden="true">
-            ↺
-          </span>
-        </button>
+        <p className="mt-6 border-t border-dashed border-line-strong pt-5 text-sm text-muted">
+          This account can submit one project. Only an organizer can delete it and allow another submission.
+        </p>
       </div>
     );
   }

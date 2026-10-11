@@ -50,7 +50,7 @@ async function SubmitContent() {
           Submit a project
         </h1>
         <p className="mt-4 max-w-xl text-muted">
-          This page is only for handing in your work. One submission per team. Only the Ctrl C organizers can see it.
+          This page is only for handing in your work. One project per person. Only the Ctrl C organizers can see it.
         </p>
         <div className="mt-12">
           <ProjectForm />
