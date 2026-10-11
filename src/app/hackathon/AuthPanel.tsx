@@ -7,6 +7,8 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   sendEmailVerification,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   updateProfile,
   AuthError,
@@ -37,6 +39,9 @@ function firebaseMessage(err: unknown): string {
       "Firebase Auth is not configured. Email/Password sign-in may need to be enabled.",
     "auth/invalid-action-code": "This reset link is invalid or has expired. Request a new one.",
     "auth/missing-android-pkg-name": "Password reset is not configured correctly. Ask the organiser to check Firebase Auth.",
+    "auth/popup-closed-by-user": "Google sign-in was cancelled.",
+    "auth/popup-blocked": "Your browser blocked the Google sign-in popup. Allow popups and try again.",
+    "auth/unauthorized-domain": "This website is not authorized in Firebase. Add ctrl-c-flax.vercel.app in Firebase Auth settings.",
   };
   return map[code] ?? `Something went wrong (${code || "unknown"}). Please try again.`;
 }
@@ -102,6 +107,7 @@ export function AuthPanel() {
           <SignUpForm
             initialEmail={sharedEmail}
             onSwitchToSignIn={(email) => switchTo("signin", email)}
+            onSuccess={() => setSignedIn(true)}
           />
         )}
         {mode === "signin" && (
@@ -115,10 +121,6 @@ export function AuthPanel() {
         {mode === "forgot" && (
           <ForgotPassword
             initialEmail={sharedEmail}
-            onDone={() => {
-              switchTo("signin");
-              setNotice("Password reset email sent. Check your inbox.");
-            }}
             onBack={() => switchTo("signin")}
           />
         )}
@@ -134,9 +136,11 @@ export function AuthPanel() {
 function SignUpForm({
   initialEmail,
   onSwitchToSignIn,
+  onSuccess,
 }: {
   initialEmail?: string;
   onSwitchToSignIn?: (email: string) => void;
+  onSuccess: () => void;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(initialEmail || "");
@@ -277,6 +281,7 @@ function SignUpForm({
         <span>{pending ? "Signing up…" : "Sign up"}</span>
         <span className="key__hint" aria-hidden="true">↵</span>
       </button>
+      <GoogleButton onSuccess={onSuccess} />
     </form>
   );
 }
@@ -387,7 +392,46 @@ function SignInForm({
         <span>{pending ? "Signing in…" : "Sign in"}</span>
         <span className="key__hint" aria-hidden="true">↵</span>
       </button>
+      <GoogleButton onSuccess={onSuccess} />
     </form>
+  );
+}
+
+function GoogleButton({ onSuccess }: { onSuccess: () => void }) {
+  const [error, setError] = useState<string>();
+  const [pending, startTransition] = useTransition();
+
+  function handleGoogle() {
+    setError(undefined);
+    startTransition(async () => {
+      try {
+        const credential = await signInWithPopup(clientAuth, new GoogleAuthProvider());
+        if (!credential.user.emailVerified) {
+          await signOut(clientAuth);
+          setError("Verify your Google email before joining the hackathon.");
+          return;
+        }
+        const result = await createSession(await credential.user.getIdToken(), credential.user.displayName || undefined);
+        if (result?.error) setError(result.error);
+        else onSuccess();
+      } catch (err) {
+        setError(firebaseMessage(err));
+      }
+    });
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-3 text-xs text-faint" aria-hidden="true">
+        <span className="h-px flex-1 bg-line" />
+        <span>or</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      {error && <p role="alert" className="text-sm text-[var(--maroon)]">{error}</p>}
+      <button type="button" className="key w-full" onClick={handleGoogle} disabled={pending}>
+        <span>{pending ? "Connecting…" : "Continue with Google"}</span>
+      </button>
+    </div>
   );
 }
 
@@ -396,15 +440,14 @@ function SignInForm({
 
 function ForgotPassword({
   initialEmail,
-  onDone,
   onBack,
 }: {
   initialEmail?: string;
-  onDone: () => void;
   onBack: () => void;
 }) {
   const [email, setEmail] = useState(initialEmail || "");
   const [error, setError] = useState<string>();
+  const [sent, setSent] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent) {
@@ -420,7 +463,7 @@ function ForgotPassword({
     startTransition(async () => {
       try {
         await sendPasswordResetEmail(clientAuth, normalizedEmail);
-        onDone(); // Switch back to sign-in with a success notice
+        setSent(true);
       } catch (err) {
         const code = (err as AuthError)?.code ?? "";
         setError(firebaseMessage(err));
@@ -430,6 +473,18 @@ function ForgotPassword({
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
+      {sent ? (
+        <div role="status" className="grid gap-4">
+          <div>
+            <h2 className="display-wide text-[1.6rem] leading-[1.05]">Check your inbox</h2>
+            <p className="mt-2 text-sm text-muted">We sent a password reset link. Check spam too, then return here to sign in.</p>
+          </div>
+          <button type="button" onClick={onBack} className="key key--primary w-full">
+            <span>Back to sign in</span>
+          </button>
+        </div>
+      ) : (
+        <>
       <div>
         <h2 className="display-wide text-[1.6rem] leading-[1.05]">Forgot password</h2>
         <p className="mt-2 text-sm text-muted">
@@ -467,6 +522,8 @@ function ForgotPassword({
       >
         Back to sign in
       </button>
+        </>
+      )}
     </form>
   );
 }
