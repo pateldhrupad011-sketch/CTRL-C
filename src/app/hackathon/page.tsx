@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { Suspense } from "react";
 import { signOut } from "@/actions/hackathon-auth";
 import { getHackathonConfig } from "@/lib/hackathon-config";
 import { getCurrentParticipant } from "@/lib/participant-session";
@@ -15,6 +14,8 @@ export const metadata: Metadata = {
   title: "Hackathon",
   description: "The Ctrl C hackathon: sign up, build something with your team, and submit your project.",
 };
+
+export const instant = false;
 
 const LEAF = "M12 1.5c.9 2.3 2.4 3.6 4.4 3.9-.6 1.4-.5 2.6.4 3.6 1.3-.9 2.8-1.1 4.6-.6-.8 2-.6 3.6.8 4.8-2.4.5-3.9 1.7-4.4 3.6-1.5-.8-3-.9-4.6-.3l.6 6h-1.6l.6-6c-1.6-.6-3.1-.5-4.6.3-.5-1.9-2-3.1-4.4-3.6 1.4-1.2 1.6-2.8.8-4.8 1.8-.5 3.3-.3 4.6.6.9-1 1-2.2.4-3.6 2-.3 3.5-1.6 4.4-3.9Z";
 
@@ -49,9 +50,7 @@ export default function HackathonPage() {
           <span className="sr-only">Back to the Ctrl C homepage</span>
         </Link>
         <div className="flex items-center gap-3">
-          <Suspense fallback={null}>
-            <HeaderAccount />
-          </Suspense>
+          <HeaderAccount />
           <ThemeToggle />
         </div>
       </header>
@@ -93,9 +92,7 @@ export default function HackathonPage() {
 
             <div id="join" className="relative scroll-mt-6 lg:rotate-[0.6deg]">
               <span className="fall-tape -top-3 left-1/2 z-10 -translate-x-1/2 -rotate-3" aria-hidden="true" />
-              <Suspense fallback={<div className="fall-card h-[26rem]" aria-hidden="true" />}>
-                <JoinCard />
-              </Suspense>
+              <JoinCard />
             </div>
           </div>
         </section>
