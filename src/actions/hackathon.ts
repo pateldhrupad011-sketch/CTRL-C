@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin-auth";
 import { PROJECT_LIMITS, type ProjectErrors, type ProjectInput, sniffImage, validateProject } from "@/lib/hackathon";
-import { deleteProject, createProject } from "@/lib/projects";
+import { deleteProject, createProject, getProjectBySubmitter } from "@/lib/projects";
 import { getCurrentParticipant } from "@/lib/participant-session";
 import { isSubmissionUnlocked } from "@/lib/submit-unlock";
 import { clientIp, createLimiter } from "@/lib/rate-limit";
@@ -44,6 +44,14 @@ export async function submitProject(_prev: ProjectState, formData: FormData): Pr
   }
 
   if (text(formData, "website")) return { status: "success", teamName: values.teamName };
+
+  if (await getProjectBySubmitter(participant.id)) {
+    return {
+      status: "error",
+      message: "You already have a project submission. Ask an organizer to delete it before submitting again.",
+      values,
+    };
+  }
 
   const errors = validateProject(values);
 

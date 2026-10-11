@@ -75,6 +75,22 @@ export async function listProjects(): Promise<Project[]> {
   return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function getProjectBySubmitter(submitterId: string): Promise<Project | undefined> {
+  try {
+    const snap = await db().collection(COLLECTION).where("submittedBy.id", "==", submitterId).limit(1).get();
+    if (!snap.empty) {
+      const data = snap.docs[0].data();
+      const { imageData, ...project } = data;
+      return project as Project;
+    }
+  } catch (error) {
+    console.warn("[projects] Firestore submitter lookup error, falling back to disk:", error);
+  }
+
+  await queue;
+  return (await loadFile()).find((project) => project.submittedBy?.id === submitterId);
+}
+
 export async function getProjectImage(id: string): Promise<Buffer | null> {
   try {
     const doc = await db().collection(COLLECTION).doc(id).get();
