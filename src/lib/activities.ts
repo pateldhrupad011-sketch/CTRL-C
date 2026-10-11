@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { connection } from "next/server";
 import { whatWeDo } from "@/content/copy";
+import { db } from "./firebase";
 
 export const ACTIVITY_STATUSES = [
   "Planned",
@@ -61,6 +62,20 @@ export function blankActivity(existing: Activity[]): Activity {
 
 export async function getActivities(): Promise<Activity[]> {
   await connection();
+
+  // Try Firestore first
+  try {
+    const doc = await db().collection("config").doc("activities").get();
+    if (doc.exists) {
+      const data = doc.data();
+      const list = readList(data?.list);
+      if (list) return list;
+    }
+  } catch (error) {
+    console.warn("[activities] Firestore get warning, falling back to disk:", error);
+  }
+
+  // Fallback to local file
   try {
     return readList(JSON.parse(await readFile(FILE, "utf8"))) ?? DEFAULTS;
   } catch (error) {
@@ -70,8 +85,20 @@ export async function getActivities(): Promise<Activity[]> {
 }
 
 export async function saveActivities(list: Activity[]) {
-  await mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${FILE}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(list, null, 2), "utf8");
-  await rename(tmp, FILE);
+  // Save to Firestore
+  try {
+    await db().collection("config").doc("activities").set({ list });
+  } catch (error) {
+    console.error("[activities] Firestore save error:", error);
+  }
+
+  // Backup to local file
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    const tmp = `${FILE}.${process.pid}.tmp`;
+    await writeFile(tmp, JSON.stringify(list, null, 2), "utf8");
+    await rename(tmp, FILE);
+  } catch (err) {
+    console.warn("[activities] Local file save warning:", err);
+  }
 }

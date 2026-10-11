@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
 function app() {
@@ -8,7 +9,7 @@ function app() {
     if (existing) return existing;
 
     const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? "")
-        .replace(/^"|"$/g, "")
+        .replace(/^\"|\"$/g, "")
         .replace(/\\n/g, "\n");
 
     return initializeApp({
@@ -20,6 +21,12 @@ function app() {
     });
 }
 
+/** Firestore database (server-only). */
 export function db() {
     return getFirestore(app());
+}
+
+/** Firebase Admin Auth (server-only) — use to verify ID tokens and session cookies. */
+export function adminAuth() {
+    return getAuth(app());
 }

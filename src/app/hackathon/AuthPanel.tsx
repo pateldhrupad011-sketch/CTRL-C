@@ -1,19 +1,53 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
-  type AuthField,
-  type AuthState,
-  type ResetState,
-  confirmPasswordReset,
-  requestPasswordReset,
-  signIn,
-  signUp,
-} from "@/actions/hackathon-auth";
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
+  AuthError,
+} from "firebase/auth";
+import { clientAuth } from "@/lib/firebase-client";
+import { createSession } from "@/actions/hackathon-auth";
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function firebaseMessage(err: unknown): string {
+  const code = (err as AuthError)?.code ?? "";
+  if (process.env.NODE_ENV !== "production") {
+    console.error("[Firebase Auth error]", code, err);
+  }
+  const map: Record<string, string> = {
+    "auth/email-already-in-use": "That email already has an account. Sign in instead.",
+    "auth/invalid-email": "That email doesn't look right.",
+    "auth/weak-password": "Use at least 6 characters.",
+    "auth/user-not-found": "Wrong email or password.",
+    "auth/wrong-password": "Wrong email or password.",
+    "auth/invalid-credential": "Wrong email or password.",
+    "auth/too-many-requests": "Too many attempts. Wait a moment and try again.",
+    "auth/network-request-failed": "Network error. Check your connection and try again.",
+    "auth/operation-not-allowed":
+      "Email/Password sign-in is not enabled. Ask the organiser to enable it in Firebase Console.",
+    "auth/configuration-not-found":
+      "Firebase Auth is not configured. Email/Password sign-in may need to be enabled.",
+  };
+  return map[code] ?? `Something went wrong (${code || "unknown"}). Please try again.`;
+}
+
+// ─── root panel ─────────────────────────────────────────────────────────────
 
 export function AuthPanel() {
   const [mode, setMode] = useState<"signup" | "signin" | "forgot">("signup");
   const [notice, setNotice] = useState<string>();
+  const [sharedEmail, setSharedEmail] = useState("");
+
+  const switchTo = (m: "signup" | "signin" | "forgot", emailPrefill?: string) => {
+    setMode(m);
+    setNotice(undefined);
+    if (emailPrefill !== undefined) setSharedEmail(emailPrefill);
+  };
 
   return (
     <div className="fall-card p-6 md:p-8">
@@ -31,28 +65,45 @@ export function AuthPanel() {
             id={`auth-tab-${id}`}
             aria-selected={mode === id || (id === "signin" && mode === "forgot")}
             aria-controls="auth-panel"
-            onClick={() => {
-              setMode(id);
-              setNotice(undefined);
-            }}
+            onClick={() => switchTo(id)}
             className={`rounded-md py-2 text-sm font-medium transition-colors ${
-              mode === id || (id === "signin" && mode === "forgot") ? "bg-[var(--pumpkin)] text-white" : "text-muted hover:text-fg"
+              mode === id || (id === "signin" && mode === "forgot")
+                ? "bg-[var(--pumpkin)] text-white"
+                : "text-muted hover:text-fg"
             }`}
           >
             {label}
           </button>
         ))}
       </div>
-      <div id="auth-panel" role="tabpanel" aria-labelledby={`auth-tab-${mode === "signup" ? "signup" : "signin"}`} className="mt-6">
-        {mode === "signup" && <SignUpForm />}
-        {mode === "signin" && <SignInForm notice={notice} onForgot={() => setMode("forgot")} />}
+
+      <div
+        id="auth-panel"
+        role="tabpanel"
+        aria-labelledby={`auth-tab-${mode === "signup" ? "signup" : "signin"}`}
+        className="mt-6"
+      >
+        {mode === "signup" && (
+          <SignUpForm
+            initialEmail={sharedEmail}
+            onSwitchToSignIn={(email) => switchTo("signin", email)}
+          />
+        )}
+        {mode === "signin" && (
+          <SignInForm
+            initialEmail={sharedEmail}
+            notice={notice}
+            onForgot={() => switchTo("forgot")}
+          />
+        )}
         {mode === "forgot" && (
           <ForgotPassword
+            initialEmail={sharedEmail}
             onDone={() => {
-              setNotice("Password updated. Sign in with your new password.");
-              setMode("signin");
+              setNotice("Password reset email sent. Check your inbox.");
+              switchTo("signin");
             }}
-            onBack={() => setMode("signin")}
+            onBack={() => switchTo("signin")}
           />
         )}
       </div>
@@ -60,39 +111,95 @@ export function AuthPanel() {
   );
 }
 
-function useFieldHelpers(state: AuthState) {
-  const fieldProps = (name: AuthField) =>
-    state.errors?.[name] ? { "aria-invalid": true as const, "aria-describedby": `auth-${name}-error` } : {};
-  const errorText = (name: AuthField) =>
-    state.errors?.[name] ? (
-      <p id={`auth-${name}-error`} className="mt-1.5 text-sm text-[var(--maroon)]">
-        {state.errors[name]}
-      </p>
-    ) : null;
-  return { fieldProps, errorText };
-}
+// ─── sign up ─────────────────────────────────────────────────────────────────
 
-function SignUpForm() {
-  const [state, action, pending] = useActionState(signUp, {});
-  const { fieldProps, errorText } = useFieldHelpers(state);
+function SignUpForm({
+  initialEmail,
+  onSwitchToSignIn,
+}: {
+  initialEmail?: string;
+  onSwitchToSignIn?: (email: string) => void;
+}) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(initialEmail || "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string>();
+  const [emailInUse, setEmailInUse] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pending, startTransition] = useTransition();
+
+  function validate() {
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = "Tell us your name.";
+    else if (name.length > 100) errs.name = "Keep it under 100 characters.";
+    if (!email.trim()) errs.email = "We need your email.";
+    if (password.length < 6) errs.password = "Use at least 6 characters.";
+    return errs;
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      return;
+    }
+    setFieldErrors({});
+    setError(undefined);
+    setEmailInUse(false);
+
+    startTransition(async () => {
+      try {
+        // 1. Create Firebase Auth user
+        const cred = await createUserWithEmailAndPassword(clientAuth, email.trim(), password);
+        // 2. Set display name in Firebase Auth
+        await updateProfile(cred.user, { displayName: name.trim() });
+        // 3. Get fresh ID token and hand it to the server
+        const idToken = await cred.user.getIdToken();
+        const result = await createSession(idToken, name.trim());
+        if (result?.error) {
+          setError(result.error);
+        } else {
+          router.refresh();
+        }
+      } catch (err: unknown) {
+        const code = (err as AuthError)?.code ?? "";
+        if (code === "auth/email-already-in-use") {
+          setEmailInUse(true);
+        }
+        setError(firebaseMessage(err));
+      }
+    });
+  }
 
   return (
-    <form action={action} noValidate className="grid gap-4">
+    <form onSubmit={handleSubmit} noValidate className="grid gap-4">
       <div>
         <h2 className="display-wide text-[1.6rem] leading-[1.05]">Join the hackathon</h2>
-        <p className="mt-2 text-sm text-muted">Create an account to take part. You’ll use it to submit your project.</p>
+        <p className="mt-2 text-sm text-muted">Create an account to take part. You'll use it to submit your project.</p>
       </div>
+
       <div>
-        <label htmlFor="auth-name" className="mono text-muted">
-          Name
-        </label>
-        <input id="auth-name" name="name" className="field mt-2" autoComplete="name" required defaultValue={state.name} {...fieldProps("name")} />
-        {errorText("name")}
+        <label htmlFor="auth-name" className="mono text-muted">Name</label>
+        <input
+          id="auth-name"
+          name="name"
+          className="field mt-2"
+          autoComplete="name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          aria-invalid={!!fieldErrors.name}
+          aria-describedby={fieldErrors.name ? "auth-name-error" : undefined}
+        />
+        {fieldErrors.name && (
+          <p id="auth-name-error" className="mt-1.5 text-sm text-[var(--maroon)]">{fieldErrors.name}</p>
+        )}
       </div>
+
       <div>
-        <label htmlFor="auth-email" className="mono text-muted">
-          Email
-        </label>
+        <label htmlFor="auth-email" className="mono text-muted">Email</label>
         <input
           id="auth-email"
           name="email"
@@ -100,177 +207,241 @@ function SignUpForm() {
           className="field mt-2"
           autoComplete="email"
           required
-          defaultValue={state.email}
-          {...fieldProps("email")}
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (emailInUse) setEmailInUse(false);
+          }}
+          aria-invalid={!!fieldErrors.email}
+          aria-describedby={fieldErrors.email ? "auth-email-error" : undefined}
         />
-        {errorText("email")}
+        {fieldErrors.email && (
+          <p id="auth-email-error" className="mt-1.5 text-sm text-[var(--maroon)]">{fieldErrors.email}</p>
+        )}
       </div>
+
       <div>
-        <label htmlFor="auth-password" className="mono text-muted">
-          Password
-        </label>
+        <label htmlFor="auth-password" className="mono text-muted">Password</label>
         <input
           id="auth-password"
           name="password"
           type="password"
           className="field mt-2"
           autoComplete="new-password"
-          minLength={8}
+          minLength={6}
           required
-          {...fieldProps("password")}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          aria-invalid={!!fieldErrors.password}
+          aria-describedby={fieldErrors.password ? "auth-password-error" : undefined}
         />
-        <p className="mt-1.5 text-sm text-faint">At least 8 characters.</p>
-        {errorText("password")}
+        <p className="mt-1.5 text-sm text-faint">At least 6 characters.</p>
+        {fieldErrors.password && (
+          <p id="auth-password-error" className="mt-1.5 text-sm text-[var(--maroon)]">{fieldErrors.password}</p>
+        )}
       </div>
-      {state.error && (
-        <p role="alert" className="text-sm text-[var(--maroon)]">
-          {state.error}
-        </p>
+
+      {error && (
+        <div role="alert" className="grid gap-2">
+          <p className="text-sm text-[var(--maroon)]">{error}</p>
+          {emailInUse && onSwitchToSignIn && (
+            <button
+              type="button"
+              onClick={() => onSwitchToSignIn(email.trim())}
+              className="text-left text-sm text-[var(--pumpkin)] underline underline-offset-4"
+            >
+              Sign in with this email →
+            </button>
+          )}
+        </div>
       )}
+
       <button type="submit" className="key key--primary w-full" disabled={pending}>
         <span>{pending ? "Signing up…" : "Sign up"}</span>
-        <span className="key__hint" aria-hidden="true">
-          ↵
-        </span>
+        <span className="key__hint" aria-hidden="true">↵</span>
       </button>
     </form>
   );
 }
 
-function SignInForm({ notice, onForgot }: { notice?: string; onForgot: () => void }) {
-  const [state, action, pending] = useActionState(signIn, {});
+// ─── sign in ─────────────────────────────────────────────────────────────────
+
+function SignInForm({
+  initialEmail,
+  notice,
+  onForgot,
+}: {
+  initialEmail?: string;
+  notice?: string;
+  onForgot: () => void;
+}) {
+  const router = useRouter();
+  const [email, setEmail] = useState(initialEmail || "");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string>();
+  const [pending, startTransition] = useTransition();
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+    setError(undefined);
+
+    startTransition(async () => {
+      try {
+        // 1. Sign in with Firebase Auth
+        const cred = await signInWithEmailAndPassword(clientAuth, email.trim(), password);
+        // 2. Get fresh ID token and hand it to the server
+        const idToken = await cred.user.getIdToken();
+        const result = await createSession(idToken, cred.user.displayName || undefined);
+        if (result?.error) {
+          setError(result.error);
+        } else {
+          router.refresh();
+        }
+      } catch (err) {
+        setError(firebaseMessage(err));
+      }
+    });
+  }
 
   return (
-    <form action={action} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-4">
       <div>
         <h2 className="display-wide text-[1.6rem] leading-[1.05]">Welcome back</h2>
         <p className="mt-2 text-sm text-muted">Sign in with the account you made for the hackathon.</p>
       </div>
+
       {notice && (
-        <p role="status" className="rounded-md border border-line px-3 py-2 text-sm">
-          {notice}
-        </p>
+        <p role="status" className="rounded-md border border-line px-3 py-2 text-sm">{notice}</p>
       )}
+
       <div>
-        <label htmlFor="signin-email" className="mono text-muted">
-          Email
-        </label>
-        <input id="signin-email" name="email" type="email" className="field mt-2" autoComplete="email" required defaultValue={state.email} />
+        <label htmlFor="signin-email" className="mono text-muted">Email</label>
+        <input
+          id="signin-email"
+          name="email"
+          type="email"
+          className="field mt-2"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
       </div>
+
       <div>
-        <label htmlFor="signin-password" className="mono text-muted">
-          Password
-        </label>
-        <input id="signin-password" name="password" type="password" className="field mt-2" autoComplete="current-password" required />
-        <button type="button" onClick={onForgot} className="mt-2 text-sm text-[var(--pumpkin)] underline underline-offset-4">
+        <label htmlFor="signin-password" className="mono text-muted">Password</label>
+        <input
+          id="signin-password"
+          name="password"
+          type="password"
+          className="field mt-2"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={onForgot}
+          className="mt-2 text-sm text-[var(--pumpkin)] underline underline-offset-4"
+        >
           Forgot password?
         </button>
       </div>
-      {state.error && (
-        <p role="alert" className="text-sm text-[var(--maroon)]">
-          {state.error}
-        </p>
+
+      {error && (
+        <p role="alert" className="text-sm text-[var(--maroon)]">{error}</p>
       )}
+
       <button type="submit" className="key key--primary w-full" disabled={pending}>
         <span>{pending ? "Signing in…" : "Sign in"}</span>
-        <span className="key__hint" aria-hidden="true">
-          ↵
-        </span>
+        <span className="key__hint" aria-hidden="true">↵</span>
       </button>
     </form>
   );
 }
 
-function ForgotPassword({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
-  const [request, requestAction, requesting] = useActionState(requestPasswordReset, { step: "email" } as ResetState);
-  const [confirm, confirmAction, confirming] = useActionState(confirmPasswordReset, { step: "code" } as ResetState);
+// ─── forgot password ─────────────────────────────────────────────────────────
+// Firebase sends the reset email directly — no custom codes needed.
 
-  if (confirm.step === "done") {
-    return (
-      <div role="status" className="grid gap-4">
-        <h2 className="display-wide text-[1.6rem] leading-[1.05]">Password updated</h2>
-        <p className="text-sm text-muted">You can now sign in with your new password.</p>
-        <button type="button" className="key key--primary w-full" onClick={onDone}>
-          <span>Back to sign in</span>
-          <span className="key__hint" aria-hidden="true">
-            →
-          </span>
-        </button>
-      </div>
-    );
-  }
+function ForgotPassword({
+  initialEmail,
+  onDone,
+  onBack,
+}: {
+  initialEmail?: string;
+  onDone: () => void;
+  onBack: () => void;
+}) {
+  const [email, setEmail] = useState(initialEmail || "");
+  const [error, setError] = useState<string>();
+  const [pending, startTransition] = useTransition();
 
-  if (request.step === "code") {
-    return (
-      <form action={confirmAction} className="grid gap-4">
-        <div>
-          <h2 className="display-wide text-[1.6rem] leading-[1.05]">Check your email</h2>
-          <p className="mt-2 text-sm text-muted">
-            If <span className="text-fg">{request.email}</span> has an account, we sent it a 6-digit code. It expires in 15
-            minutes.
-          </p>
-        </div>
-        <input type="hidden" name="email" value={request.email} />
-        <div>
-          <label htmlFor="reset-code" className="mono text-muted">
-            Code
-          </label>
-          <input
-            id="reset-code"
-            name="code"
-            className="field mt-2 tracking-[0.3em]"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="reset-password" className="mono text-muted">
-            New password
-          </label>
-          <input id="reset-password" name="password" type="password" className="field mt-2" autoComplete="new-password" minLength={8} required />
-          <p className="mt-1.5 text-sm text-faint">At least 8 characters.</p>
-        </div>
-        {confirm.error && (
-          <p role="alert" className="text-sm text-[var(--maroon)]">
-            {confirm.error}
-          </p>
-        )}
-        <button type="submit" className="key key--primary w-full" disabled={confirming}>
-          <span>{confirming ? "Saving…" : "Reset password"}</span>
-          <span className="key__hint" aria-hidden="true">
-            ↵
-          </span>
-        </button>
-      </form>
-    );
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError("Enter the email you signed up with.");
+      return;
+    }
+    setError(undefined);
+
+    startTransition(async () => {
+      try {
+        await sendPasswordResetEmail(clientAuth, email.trim());
+        onDone(); // Switch back to sign-in with a success notice
+      } catch (err) {
+        const code = (err as AuthError)?.code ?? "";
+        // Don't reveal whether the email exists — always show success.
+        if (code === "auth/user-not-found" || code === "auth/invalid-email") {
+          onDone();
+        } else {
+          setError(firebaseMessage(err));
+        }
+      }
+    });
   }
 
   return (
-    <form action={requestAction} className="grid gap-4">
+    <form onSubmit={handleSubmit} className="grid gap-4">
       <div>
         <h2 className="display-wide text-[1.6rem] leading-[1.05]">Forgot password</h2>
-        <p className="mt-2 text-sm text-muted">Enter the email you signed up with and we’ll send you a code.</p>
-      </div>
-      <div>
-        <label htmlFor="forgot-email" className="mono text-muted">
-          Email
-        </label>
-        <input id="forgot-email" name="email" type="email" className="field mt-2" autoComplete="email" required defaultValue={request.email} />
-      </div>
-      {request.error && (
-        <p role="alert" className="text-sm text-[var(--maroon)]">
-          {request.error}
+        <p className="mt-2 text-sm text-muted">
+          Enter the email you signed up with and Firebase will send you a reset link.
         </p>
+      </div>
+
+      <div>
+        <label htmlFor="forgot-email" className="mono text-muted">Email</label>
+        <input
+          id="forgot-email"
+          name="email"
+          type="email"
+          className="field mt-2"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-[var(--maroon)]">{error}</p>
       )}
-      <button type="submit" className="key key--primary w-full" disabled={requesting}>
-        <span>{requesting ? "Sending…" : "Send code"}</span>
-        <span className="key__hint" aria-hidden="true">
-          ↵
-        </span>
+
+      <button type="submit" className="key key--primary w-full" disabled={pending}>
+        <span>{pending ? "Sending…" : "Send reset link"}</span>
+        <span className="key__hint" aria-hidden="true">↵</span>
       </button>
-      <button type="button" onClick={onBack} className="text-sm text-muted underline underline-offset-4 hover:text-fg">
+
+      <button
+        type="button"
+        onClick={onBack}
+        className="text-sm text-muted underline underline-offset-4 hover:text-fg"
+      >
         Back to sign in
       </button>
     </form>

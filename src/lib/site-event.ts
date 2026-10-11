@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { connection } from "next/server";
 import { EVENT_STATUSES, events, type CtrlEvent, type EventStatus } from "@/content/events";
+import { db } from "./firebase";
 
 export const EVENT_LIMITS = { title: 80, type: 40, description: 400, date: 40, place: 80 };
 
@@ -72,6 +73,19 @@ function toEvent(fields: EventFields): CtrlEvent {
 
 export async function getEventFields(): Promise<EventFields> {
   await connection();
+
+  // Try Firestore first
+  try {
+    const doc = await db().collection("config").doc("featured-event").get();
+    if (doc.exists) {
+      const parsed = readFields(doc.data());
+      if (parsed) return parsed;
+    }
+  } catch (error) {
+    console.warn("[site-event] Firestore get warning, falling back to disk:", error);
+  }
+
+  // Fallback to local file
   try {
     return readFields(JSON.parse(await readFile(FILE, "utf8"))) ?? fieldsFrom(FALLBACK);
   } catch (error) {
@@ -85,8 +99,20 @@ export async function getFeaturedEvent(): Promise<CtrlEvent> {
 }
 
 export async function saveEventFields(fields: EventFields) {
-  await mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${FILE}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(fields, null, 2), "utf8");
-  await rename(tmp, FILE);
+  // Save to Firestore
+  try {
+    await db().collection("config").doc("featured-event").set(fields);
+  } catch (error) {
+    console.error("[site-event] Firestore save error:", error);
+  }
+
+  // Backup to local file
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    const tmp = `${FILE}.${process.pid}.tmp`;
+    await writeFile(tmp, JSON.stringify(fields, null, 2), "utf8");
+    await rename(tmp, FILE);
+  } catch (err) {
+    console.warn("[site-event] Local file save warning:", err);
+  }
 }
