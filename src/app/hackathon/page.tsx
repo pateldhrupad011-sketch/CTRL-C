@@ -27,7 +27,7 @@ const FACTS = [
 const STEPS = [
   { n: "1", title: "Make an account", body: "Name, email, password. That’s it. We won’t spam you." },
   { n: "2", title: "Find your people", body: "Come solo or bring up to five friends. Teams can change before you submit." },
-  { n: "3", title: "Build the thing", body: "Keep the code on GitHub and put a demo somewhere people can click it. Rough edges are expected." },
+  { n: "3", title: "Build your masterpiece", body: "Keep the code on GitHub and put a demo somewhere people can click it. Rough edges are expected." },
   { n: "4", title: "Hand it in", body: "Come back here, sign in and send us your links, a screenshot and an honest note on how you used AI." },
 ];
 
