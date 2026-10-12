@@ -132,15 +132,15 @@ export const gallery = {
 };
 
 export const story = {
-  heading: "Founded by Dhrupad Patel, Krushna Vaishnav and Ojas Boodula.",
-  founders: ["Dhrupad Patel", "Krushna Vaishnav", "Ojas Boodula"],
+  heading: "Founded by Dhrupad Patel, Krushna Vaishnav and Ojas Boddula.",
+  founders: ["Dhrupad Patel", "Krushna Vaishnav", "Ojas Boddula"],
   paragraphs: [
     "Ctrl C is brand new. It started with a simple intention: make a place where students who like building things can find each other, learn from each other, and make more ambitious things together than they would alone.",
   ],
   log: {
     command: "git log --reverse",
     commit: "commit 0000001 (HEAD → main)",
-    authors: ["Dhrupad Patel", "Krushna Vaishnav", "Ojas Boodula"],
+    authors: ["Dhrupad Patel", "Krushna Vaishnav", "Ojas Boddula"],
     message: ["Start Ctrl C.", "A place to build things", "with other people."],
     next: "next commit: whoever shows up",
   },
