@@ -6,7 +6,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
-  sendEmailVerification,
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
@@ -181,9 +180,9 @@ function SignUpForm({
         const cred = await createUserWithEmailAndPassword(clientAuth, email.trim(), password);
         // 2. Set display name in Firebase Auth
         await updateProfile(cred.user, { displayName: name.trim() });
-        await sendEmailVerification(cred.user);
-        await signOut(clientAuth);
-        setError("Check your inbox and click the verification link. Then return here and sign in.");
+        const result = await createSession(await cred.user.getIdToken(), name.trim());
+        if (result?.error) setError(result.error);
+        else onSuccess();
       } catch (err: unknown) {
         const code = (err as AuthError)?.code ?? "";
         if (code === "auth/email-already-in-use") {
@@ -317,12 +316,6 @@ function SignInForm({
       try {
         // 1. Sign in with Firebase Auth
         const cred = await signInWithEmailAndPassword(clientAuth, email.trim(), password);
-        if (!cred.user.emailVerified) {
-          await sendEmailVerification(cred.user);
-          await signOut(clientAuth);
-          setError("Verify your email first. We sent a new verification link.");
-          return;
-        }
         // 2. Get fresh ID token and hand it to the server
         const idToken = await cred.user.getIdToken();
         const result = await createSession(idToken, cred.user.displayName || undefined);
