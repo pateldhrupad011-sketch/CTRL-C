@@ -24,15 +24,14 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     return { error: "Too many attempts. Wait 15 minutes and try again.", username };
   }
 
-  const userOk = safeEqual(username, creds.username);
-  const passOk = safeEqual(password, creds.password);
-  if (!userOk || !passOk) {
+  const validLogin = creds.some((credential) => safeEqual(username, credential.username) && safeEqual(password, credential.password));
+  if (!validLogin) {
     loginLimiter.hit(ip);
     return { error: "Wrong username or password.", username };
   }
 
   loginLimiter.reset(ip);
-  await startSession(creds.username);
+  await startSession(username);
   redirect("/admin");
 }
 
